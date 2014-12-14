@@ -126,6 +126,8 @@ extern std::map<CInv, CDataStream> mapRelay;
 extern std::deque<std::pair<int64, CInv> > vRelayExpiration;
 extern CCriticalSection cs_mapRelay;
 extern std::map<CInv, int64> mapAlreadyAskedFor;
+extern std::vector<std::string> vAddedNodes;
+extern CCriticalSection cs_vAddedNodes;
 
 
 
@@ -242,7 +244,7 @@ public:
         setInventoryKnown.max_size(SendBufferSize() / 1000);
 
         // Be shy and don't send version until we hear
-        if (!fInbound)
+        if (hSocket != INVALID_SOCKET && !fInbound)
             PushVersion();
     }
 

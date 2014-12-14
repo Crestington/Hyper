@@ -280,7 +280,7 @@ QString TransactionTableModel::formatTxStatus(const TransactionRecord *wtx) cons
     switch(wtx->status.status)
     {
     case TransactionStatus::OpenUntilBlock:
-        status = tr("Open for %n block(s)","",wtx->status.open_for);
+        status = tr("Open for %n more block(s)","",wtx->status.open_for);
         break;
     case TransactionStatus::OpenUntilDate:
         status = tr("Open until %1").arg(GUIUtil::dateTimeStr(wtx->status.open_for));
@@ -360,8 +360,9 @@ QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
     case TransactionRecord::SendToSelf:
         return tr("Payment to yourself");
     case TransactionRecord::StakeMint:
+        return tr("PoS Mined");
     case TransactionRecord::Generated:
-        return tr("Mined");
+        return tr("PoW Mined");
     default:
         return QString();
     }

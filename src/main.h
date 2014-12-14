@@ -30,13 +30,15 @@ static const unsigned int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
 static const unsigned int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
 static const unsigned int MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
 static const unsigned int MAX_INV_SZ = 50000;
-static const int64 MIN_TX_FEE = 1.0 * CENT;
-static const int64 MIN_RELAY_TX_FEE = 1.0 * CENT;
-static const int64 MAX_MONEY = 2500000000 * COIN;			// 2.5 bil
-static const int64 MAX_MINT_PROOF_OF_STAKE = 0.01 * COIN;	// 1% annual interest
+static const int64 MIN_TX_FEE = 0.001 * CENT;
+static const int64 MIN_RELAY_TX_FEE = 0.001 * CENT;
+static const int64 MAX_MONEY = 60000000 * COIN;			// 60 mil
+static const int64 MAX_MINT_PROOF_OF_STAKE = 0.6 * COIN;	// 60% annual interest - 5% monthly interest
+static const int64 MAX_MINT_PROOF_OF_STAKE2 = 0.1 * COIN;
+static const int64 MAX_MINT_PROOF_OF_STAKE3 = 0.02 * COIN;
 static const int64 MIN_TXOUT_AMOUNT = MIN_TX_FEE;
 
-static const int POW_CUTOFF_BLOCK = 20000;
+static const int POW_CUTOFF_BLOCK = 40320;
 
 inline bool MoneyRange(int64 nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
 // Threshold for nLockTime: below this value it is interpreted as block number, otherwise as UNIX timestamp.
@@ -48,8 +50,8 @@ static const int fHaveUPnP = true;
 static const int fHaveUPnP = false;
 #endif
 
-static const uint256 hashGenesisBlockOfficial("0x560094f9b2d7624f7e0b9e9581adaa1d899eb70b2aa2871092e02cff77442ada");
-static const uint256 hashGenesisBlockTestNet ("0x560094f9b2d7624f7e0b9e9581adaa1d899eb70b2aa2871092e02cff77442ada");
+static const uint256 hashGenesisBlockOfficial("0x000001505a31622119f9e737e0550b39a956fc11a1ae01c3c77c9a50f12ef4f6");
+static const uint256 hashGenesisBlockTestNet ("0x000001505a31622119f9e737e0550b39a956fc11a1ae01c3c77c9a50f12ef4f6");
 
 static const int64 nMaxClockDrift = 2 * 60 * 60;        // two hours
 
@@ -62,6 +64,7 @@ extern std::set<std::pair<COutPoint, unsigned int> > setStakeSeen;
 extern uint256 hashGenesisBlock;
 extern CBlockIndex* pindexGenesisBlock;
 extern unsigned int nStakeMinAge;
+extern unsigned int nNodeLifespan;
 extern int nCoinbaseMaturity;
 extern int nBestHeight;
 extern CBigNum bnBestChainTrust;
@@ -83,6 +86,7 @@ extern std::map<uint256, CBlock*> mapOrphanBlocks;
 
 // Settings
 extern int64 nTransactionFee;
+extern bool fUseFastIndex;
 
 // Minimum disk space required - used in CheckDiskSpace()
 static const uint64 nMinDiskSpace = 52428800;
@@ -588,7 +592,7 @@ public:
     {
         // Large (in bytes) low-priority (new, small-coin) transactions
         // need a fee.
-        return dPriority > COIN * 1440 / 250;
+        return dPriority > COIN * 2880 / 250;
     }
 
     int64 GetMinFee(unsigned int nBlockSize=1, bool fAllowFree=false, enum GetMinFee_mode mode=GMF_BLOCK, unsigned int nBytes = 0) const;
@@ -1344,6 +1348,10 @@ public:
 /** Used to marshal pointers into hashes for db storage. */
 class CDiskBlockIndex : public CBlockIndex
 {
+
+private:
+    uint256 blockHash;
+
 public:
     uint256 hashPrev;
     uint256 hashNext;
@@ -1352,6 +1360,7 @@ public:
     {
         hashPrev = 0;
         hashNext = 0;
+        blockHash = 0;
     }
 
     explicit CDiskBlockIndex(CBlockIndex* pindex) : CBlockIndex(*pindex)
@@ -1393,10 +1402,14 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+        READWRITE(blockHash);
     )
 
     uint256 GetBlockHash() const
     {
+        if (fUseFastIndex && (nTime < GetAdjustedTime() - 12 * nMaxClockDrift) && blockHash != 0)
+            return blockHash;
+
         CBlock block;
         block.nVersion        = nVersion;
         block.hashPrevBlock   = hashPrev;
@@ -1404,9 +1417,11 @@ public:
         block.nTime           = nTime;
         block.nBits           = nBits;
         block.nNonce          = nNonce;
-        return block.GetHash();
-    }
 
+        const_cast<CDiskBlockIndex*>(this)->blockHash = block.GetHash();
+
+        return blockHash;
+    }
 
     std::string ToString() const
     {
